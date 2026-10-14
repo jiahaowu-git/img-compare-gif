@@ -1,0 +1,20 @@
+{
+  "name": "img-compare-gif",
+  "version": "1.0.0",
+  "private": true,
+  "description": "上传前后两张图片，生成一根竖直白条左右滑动的前后对比 GIF（纯浏览器本地运行，零依赖）",
+  "keywords": ["gif", "before-after", "compare", "canvas", "lzw"],
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node test/roundtrip.test.js && node test/pipeline.test.js",
+    "test:roundtrip": "node test/roundtrip.test.js",
+    "test:pipeline": "node test/pipeline.test.js",
+    "bench": "node -e \"process.env.BIG='1';require('./test/pipeline.test.js')\""
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}

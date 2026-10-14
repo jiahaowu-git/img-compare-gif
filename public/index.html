@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>img-compare-gif · 前后对比 GIF 生成器</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+
+<body>
+  <div class="bg-glow"></div>
+
+  <header class="site-header">
+    <div class="brand">
+      <span class="logo">GIF</span>
+      <div>
+        <h1>img-compare-gif</h1>
+        <p>上传两张「前后」图片，一键生成一根竖直白条左右滑动的对比动图</p>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- 左列：上传 + 参数 -->
+    <div class="column">
+      <section class="card">
+        <h2 class="card-title">1. 选择图片</h2>
+        <div class="upload-grid">
+          <label class="dropzone" data-slot="a" id="zoneA">
+            <input type="file" accept="image/*" hidden id="fileA" />
+            <div class="dz-empty">
+              <div class="dz-icon">A</div>
+              <strong>图片 A（前 / 左）</strong>
+              <span>点击选择、拖拽到此，或直接 Ctrl+V 粘贴</span>
+            </div>
+            <div class="dz-preview" hidden>
+              <img alt="图片 A 预览" />
+              <div class="dz-meta"></div>
+            </div>
+          </label>
+          <label class="dropzone" data-slot="b" id="zoneB">
+            <input type="file" accept="image/*" hidden id="fileB" />
+            <div class="dz-empty">
+              <div class="dz-icon">B</div>
+              <strong>图片 B（后 / 右）</strong>
+              <span>两张图建议尺寸一致，效果最好</span>
+            </div>
+            <div class="dz-preview" hidden>
+              <img alt="图片 B 预览" />
+              <div class="dz-meta"></div>
+            </div>
+          </label>
+        </div>
+        <p class="tips" id="sizeHint">输出尺寸 = 图片 A 的尺寸（可在下方缩小）。</p>
+      </section>
+
+      <section class="card">
+        <h2 class="card-title">2. 参数设置</h2>
+        <div class="settings">
+          <div class="field">
+            <label for="barWidth">白条宽度 <b id="barWidthVal">8 px</b></label>
+            <input type="range" id="barWidth" min="1" max="60" step="1" value="8" />
+          </div>
+          <div class="field">
+            <label for="barColor">白条颜色</label>
+            <input type="color" id="barColor" value="#ffffff" />
+          </div>
+          <div class="field">
+            <label for="frames">帧数 <b id="framesVal">30</b></label>
+            <input type="range" id="frames" min="6" max="90" step="1" value="30" />
+          </div>
+          <div class="field">
+            <label for="delay">帧间隔 <b id="delayVal">50 ms</b></label>
+            <input type="range" id="delay" min="20" max="200" step="10" value="50" />
+          </div>
+          <div class="field">
+            <label for="mode">滑动方式</label>
+            <select id="mode">
+              <option value="swing" selected>左右往返（循环无缝）</option>
+              <option value="wipe">单向冲刷（扫完回到起点）</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="scale">输出尺寸</label>
+            <select id="scale">
+              <option value="1" selected>与图片 A 同尺寸</option>
+              <option value="0.75">75%</option>
+              <option value="0.5">50%</option>
+              <option value="0.35">35%</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="fit">两图适配</label>
+            <select id="fit">
+              <option value="cover" selected>铺满裁剪（尺寸不一致时裁掉多余）</option>
+              <option value="contain">完整包含（尺寸不一致时留白）</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="colors">调色板颜色数 <b id="colorsVal">256</b></label>
+            <input type="range" id="colors" min="16" max="256" step="8" value="256" />
+          </div>
+          <div class="field check">
+            <label><input type="checkbox" id="dither" checked /> 抖动（渐变更平滑，体积略大）</label>
+          </div>
+          <div class="field check">
+            <label><input type="checkbox" id="swap" /> 左右对调（B 在左、A 在右）</label>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- 右列：预览 + 结果 -->
+    <div class="column">
+      <section class="card">
+        <h2 class="card-title">实时预览</h2>
+        <div class="preview-wrap">
+          <canvas id="preview"></canvas>
+          <div class="preview-empty" id="previewEmpty">选择两张图片后这里会实时播放对比效果</div>
+        </div>
+        <div class="preview-bar">
+          <button class="btn ghost" id="playBtn" type="button" disabled>暂停</button>
+          <input type="range" id="scrub" min="0" max="1000" value="0" disabled />
+          <span class="mono" id="previewInfo">—</span>
+        </div>
+        <p class="tips">拖动滑块可手动控制白条位置；播放时会自动循环。</p>
+      </section>
+
+      <section class="card">
+        <h2 class="card-title">3. 生成 GIF</h2>
+        <div class="actions">
+          <button class="btn primary" id="generateBtn" type="button" disabled>生成对比 GIF</button>
+          <a class="btn ghost" id="downloadBtn" href="#" download hidden>下载 GIF</a>
+        </div>
+        <div class="progress" id="progressWrap" hidden>
+          <div class="progress-inner"><span id="progressBar"></span></div>
+          <p class="mono" id="progressText">准备中…</p>
+        </div>
+        <p class="status" id="status">请先上传两张图片。</p>
+
+        <div class="result" id="resultWrap" hidden>
+          <img id="resultImg" alt="生成的对比 GIF" />
+          <div class="result-meta" id="resultMeta"></div>
+        </div>
+      </section>
+
+      <section class="card note">
+        <h2 class="card-title">说明</h2>
+        <ul>
+          <li>动画与导出均在浏览器本地完成，图片不会上传到任何服务器。</li>
+          <li>GIF 帧采用「只写变化区域」的差分编码，所以成品体积很小。</li>
+          <li>帧间隔最小 20ms（GIF 的时间精度为 10ms，多数浏览器会把 &lt;20ms 当作 100ms 处理）。</li>
+          <li>图片 A 决定输出尺寸；图 B 会按所选适配方式对齐到同一画布。</li>
+        </ul>
+      </section>
+    </div>
+  </main>
+
+  <script src="js/quantizer.js"></script>
+  <script src="js/gif-encoder.js"></script>
+  <script src="js/comparer.js"></script>
+  <script src="js/dropdown.js"></script>
+  <script src="js/app.js"></script>
+</body>
+
+</html>
