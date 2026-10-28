@@ -49,8 +49,10 @@
 ## 3. 目录与文件职责
 
 ```
-package.json              脚本与元信息（无依赖）
+package.json              脚本、Electron 打包配置（网页版无运行时依赖）
+package-lock.json         桌面版依赖锁定（npm install 生成）
 server.js                 零依赖静态服务器（唯一服务端文件）
+electron/main.js          可选桌面外壳：开窗口加载 public/index.html
 SPEC.md                   本规格书
 README.md                 用户向说明
 AGENTS.md                 现有实现约定与踩坑记录
@@ -74,19 +76,48 @@ test/
   "name": "img-compare-gif",
   "version": "1.0.0",
   "private": true,
-  "main": "server.js",
+  "main": "electron/main.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
+    "electron": "electron .",
+    "electron:dir": "electron-builder --dir",
+    "electron:build": "electron-builder",
     "test": "node test/roundtrip.test.js && node test/pipeline.test.js",
     "test:roundtrip": "node test/roundtrip.test.js",
     "test:pipeline": "node test/pipeline.test.js",
     "bench": "node -e \"process.env.BIG='1';require('./test/pipeline.test.js')\""
   },
+  "devDependencies": {
+    "electron": "^45.1.0",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "com.imgcompare.gif",
+    "productName": "img-compare-gif",
+    "directories": { "output": "dist" },
+    "files": ["electron/**/*", "public/**/*", "package.json"],
+    "asar": true,
+    "electronDist": "node_modules/electron/dist",
+    "win": { "target": ["nsis", "portable"] },
+    "mac": { "target": ["dmg"], "category": "public.app-category.graphics-design" },
+    "linux": { "target": ["AppImage"], "category": "Graphics" },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "img-compare-gif"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
+    }
+  },
   "engines": { "node": ">=18" },
   "license": "MIT"
 }
 ```
+
+> 网页版核心运行不需要 `npm install`；`electron` / `electron-builder` 只服务于桌面封装。
 
 ---
 
@@ -768,6 +799,20 @@ function lzwEncode(pixels, minCodeSize, out) {
 | 端口占用 | 捕获 `EADDRINUSE`，端口 +1 重试，最多 10 次；仍失败则 `exit(1)` |
 | 启动日志 | `img-compare-gif 已启动：http://<host>:<port>/` 与 `静态目录：<ROOT>`；`0.0.0.0/::` 显示为 `localhost` |
 
+### 7.1 Electron 桌面封装（可选，不影响网页版）
+
+- 入口 `electron/main.js`；窗口 `1280×900`、最小 `960×640`、`backgroundColor '#0b1020'`、`show:false` 等 `ready-to-show` 再显示。
+- `webPreferences`：`contextIsolation:true`、`nodeIntegration:false`、`sandbox:true`、`spellcheck:false`；无 preload、无 IPC。
+- 只加载 `path.join(__dirname, '..', 'public', 'index.html')`；`will-navigate` 仅允许 `file:`，`setWindowOpenHandler` 一律 `deny` 并用 `shell.openExternal` 打开 http(s)。
+- Windows 设置 `app.setAppUserModelId('com.imgcompare.gif')`；非 macOS 执行 `Menu.setApplicationMenu(null)`；`nativeTheme.themeSource='dark'`。
+- 生命周期：`window-all-closed` 时非 macOS 退出；macOS `activate` 且无窗口时重建。
+- 打包配置见 §3 的 `build` 字段：`asar:true`，`files` 必须含 `electron/**`、`public/**`、`package.json`；`electronDist` 指向 `node_modules/electron/dist`，跳过 electron-builder 从 GitHub 重复下载；输出 `dist/`。
+- Windows 同时构建两个目标：`nsis`（安装包，非一键、可选安装目录、建桌面快捷方式）与 `portable`（单文件免安装版，`artifactName` 为 `img-compare-gif-<version>-portable.exe`）。
+- 全平台脚本：`npm run electron` / `npm run electron:dir` / `npm run electron:build`。
+- 验收：`npm install` 后 `node --check electron/main.js`，再 `npm run electron:build` 应产出 `dist/win-unpacked/`、`dist/img-compare-gif Setup <version>.exe` 与 `dist/img-compare-gif-<version>-portable.exe`；便携版双击后界面、生成、下载与网页版一致。
+- 未配置图标（使用 Electron 默认图标）与代码签名证书（未签名），属于预期行为。
+- 若机器无法直连 GitHub，`electronDist` 已避免下载 Electron；NSIS/portable 所需工具首次会从 GitHub 拉取并缓存到 `%LOCALAPPDATA%\electron-builder\Cache`，可预先准备好该缓存或配置镜像。
+
 ---
 
 ## 8. 自检与验收
@@ -780,6 +825,10 @@ npm test                  # 两个 Node 自检必须全绿、退出码 0
 npm run bench             # 810×1080 / 30 帧 / 256 色 基准
 NODITHER=1 npm run bench  # Windows: $env:NODITHER=1; npm run bench
 node --check public/js/*.js
+npm install               # 仅桌面版需要
+npm run electron          # 桌面窗口运行
+npm run electron:dir      # 打包免安装目录到 dist/
+npm run electron:build    # 打包安装包 + 单文件便携版到 dist/
 ```
 
 ### 8.2 `test/roundtrip.test.js` 必须覆盖
@@ -821,12 +870,13 @@ node --check public/js/*.js
 - [ ] 下载文件名 `compare-{宽}x{高}-{帧数}f.gif`；结果区显示尺寸/帧数/体积/耗时。
 - [ ] 窄屏（<980px）变为单列，设置项变一列。
 - [ ] 生成期间页面不卡死（每处理 1~2 帧让出一次主线程）。
+- [ ] （可选）`npm run electron:build` 产出 NSIS 安装包与 `img-compare-gif-<version>-portable.exe`，双击便携版后界面与网页版一致且能生成/下载。
 
 ---
 
 ## 9. 从零复现顺序
 
-1. `package.json`（无依赖，脚本如上）→ `server.js` → 用 `npm start` 验证静态服务。
+1. `package.json`（网页版无运行时依赖，脚本如上）→ `server.js` → 用 `npm start` 验证静态服务。
 2. `public/js/quantizer.js`：先实现直方图 → 中位切分 → LUT → 非抖动量化；跑通颜色数/白色存在性检查。
 3. `public/js/gif-encoder.js`：先写死一张 2 色小图验证文件头/色表/Trailer，再实现 LZW，最后接 `extractSub` 与子矩形帧；用独立解码器往返比对。
 4. `public/js/comparer.js`：实现 `prepareSource` → `composeFrame` → `progressToPosition/framePositions` → `createJob`；先关闭抖动、全幅帧跑通，再打开竖带重绘与帧差。
@@ -835,6 +885,7 @@ node --check public/js/*.js
 7. `public/js/app.js`：上传 → 预览 → 生成 → 下载，最后补提示文案、空格键、建议白条宽度。
 8. 补 `test/roundtrip.test.js` 与 `test/pipeline.test.js`，直到 `npm test` 全绿。
 9. 跑 `npm run bench`，确认体积在合理量级（若比参考值大一个数量级，说明帧差或竖带重绘失效）。
+10. （可选）补 `electron/main.js` 与 `package.json` 的 `build` 字段，`npm install` 后 `npm run electron:dir` 验证桌面封装；它只加载 `public/`，不得改动网页版代码。
 
 ---
 
@@ -856,6 +907,8 @@ node --check public/js/*.js
 14. **下拉框层级**：菜单展开时给 `.card` 加 `.dropdown-open(z-index:30)`，否则会被下一张卡片盖住。
 15. **`input.value=''`**：文件选择后重置，才能连续选择同一文件。
 16. **`createImageBitmap` 失败要降级**：部分浏览器不认 `imageOrientation`，直接抛错；必须回退到 `Image`，否则上传直接失败。
+17. **Electron 打包必须带上 `public/`**：`build.files` 漏掉 `public/**` 会导致安装后白屏；`asar:true` 下用 `loadFile(path.join(__dirname,'..','public','index.html'))` 可正常读取 asar 内文件。
+18. **Electron 不要开 Node 能力**：保持 `contextIsolation:true` / `nodeIntegration:false` / `sandbox:true`；前端不得为桌面版加 `require` 或 IPC 分支，否则网页版与 `file://` 直开都会被破坏。
 
 ---
 

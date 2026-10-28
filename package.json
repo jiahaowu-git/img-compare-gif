@@ -3,15 +3,57 @@
   "version": "1.0.0",
   "private": true,
   "description": "上传前后两张图片，生成一根竖直白条左右滑动的前后对比 GIF（纯浏览器本地运行，零依赖）",
-  "keywords": ["gif", "before-after", "compare", "canvas", "lzw"],
-  "main": "server.js",
+  "keywords": ["gif", "before-after", "compare", "canvas", "lzw", "electron"],
+  "author": "img-compare-gif contributors",
+  "main": "electron/main.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
+    "electron": "electron .",
+    "electron:dir": "electron-builder --dir",
+    "electron:build": "electron-builder",
     "test": "node test/roundtrip.test.js && node test/pipeline.test.js",
     "test:roundtrip": "node test/roundtrip.test.js",
     "test:pipeline": "node test/pipeline.test.js",
     "bench": "node -e \"process.env.BIG='1';require('./test/pipeline.test.js')\""
+  },
+  "devDependencies": {
+    "electron": "^45.1.0",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "com.imgcompare.gif",
+    "productName": "img-compare-gif",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "public/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "electronDist": "node_modules/electron/dist",
+    "win": {
+      "target": ["nsis", "portable"]
+    },
+    "mac": {
+      "target": ["dmg"],
+      "category": "public.app-category.graphics-design"
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "category": "Graphics"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "img-compare-gif"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
+    }
   },
   "engines": {
     "node": ">=18"

@@ -20,6 +20,26 @@ HOST=0.0.0.0 npm start    # 允许局域网访问
 
 > `server.js` 只做一件事：把 `public/` 发出去（含 MIME、`no-cache`、`HEAD`、`/health`、目录穿越防护）。它不住渲染、不碰图片，所以不需要 Express 等依赖。
 
+## 桌面版（Electron，可选）
+
+网页版本体仍然是零依赖；Electron 只做"外壳"，窗口里加载的就是 `public/index.html`，合成与编码代码完全不分叉。
+
+```bash
+npm install              # 安装 electron / electron-builder（仅桌面版需要）
+npm run electron         # 直接打开桌面窗口（开发调试）
+npm run electron:dir     # 生成免安装目录 dist/win-unpacked/
+npm run electron:build   # 同时生成安装包与单文件便携版（Windows 为 NSIS + portable）
+```
+
+- `npm run electron:build` 的产物：
+  - `dist/img-compare-gif Setup <version>.exe`：NSIS 安装包；
+  - `dist/img-compare-gif-<version>-portable.exe`：单文件免安装版，双击即用；
+  - `dist/win-unpacked/`：未压缩目录，便于排查问题。
+- 产物输出到 `dist/`（已加入 `.gitignore`）。
+- 打包通过 `electronDist` 直接使用 `node_modules/electron/dist`，不会重复从 GitHub 下载 Electron。
+- 未配置应用图标，使用 Electron 默认图标；未配置签名证书，安装包未签名。
+- 桌面版禁用了 Node 注入、页面跳转与新窗口，外链交给系统浏览器。
+
 ## 使用方法
 
 1. 上传**图片 A（前）**与**图片 B（后）**——支持点击、拖拽、`Ctrl+V` 粘贴；

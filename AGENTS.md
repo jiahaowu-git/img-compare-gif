@@ -8,6 +8,8 @@
 
 纯前端、零依赖的「白条滑动前后对比 GIF」生成器。所有像素合成与 GIF 编码都跑在浏览器里，`server.js` 仅托管 `public/` 静态资源。**不要为了"看起来更正经"而引入构建工具或第三方运行时依赖**（gif.js、sharp、canvas、Express 等一律不必要）。
 
+`electron/` 是可选的桌面外壳（`electron` / `electron-builder` 仅为 devDependencies），它加载的仍是 `public/index.html`；**网页版核心不得依赖 Electron API，也不得为桌面版分叉前端代码**。
+
 ## 常用命令
 
 ```bash
@@ -16,6 +18,9 @@ npm test                      # 编码器往返 + 完整链路自检（改动后
 npm run bench                 # 810x1080 / 30 帧 性能与体积实测（BIG=1）
 NODITHER=1 npm run bench      # Windows: $env:NODITHER=1; npm run bench
 node --check public/js/*.js    # 快速语法检查
+npm run electron              # 桌面窗口运行（需先 npm install）
+npm run electron:dir          # 打包免安装目录到 dist/
+npm run electron:build        # 打包安装包 + 单文件便携版到 dist/
 ```
 
 ## 文件职责
@@ -28,6 +33,7 @@ node --check public/js/*.js    # 快速语法检查
 | `public/js/dropdown.js` | 把原生 `<select>` 增强为自绘下拉框 | 仅浏览器 |
 | `public/js/app.js` | 页面交互与状态 | 仅浏览器 |
 | `server.js` | 静态托管（MIME / no-cache / HEAD / `/health` / 目录穿越防护 / 端口占用自动顺延） | Node |
+| `electron/main.js` | 桌面外壳：开窗口加载 `public/index.html`，无 preload、无 Node 注入 | Electron 主进程 |
 | `test/*.test.js` | 自检脚本，`roundtrip.test.js` 导出 `decodeGif` 供 `pipeline.test.js` 复用 | Node |
 
 脚本引入顺序（`public/index.html` 末尾）有依赖：`quantizer.js` → `gif-encoder.js` → `comparer.js`（UMD 工厂在加载时即解析 `GifQuantizer` / `GifEncoder` 全局）→ `dropdown.js` → `app.js`。**全部为 classic script（非 ESM）**，这样 `file://` 直开也能用；不要改成 `type="module"`，也不要在前端引入 `fetch`/接口调用。
@@ -41,12 +47,14 @@ node --check public/js/*.js    # 快速语法检查
 5. **帧缓冲双数组不变量 `cur !== prev`**：互换三件套 `prev/cur/spare` 时必须保持两者不同。跳过无变化帧时**不要交换缓冲**（直接 `continue` 累积延时即可），否则会出现 `cur === spare` 的别名错误。
 6. **5bit 查找表假设输入已是不透明像素**：`prepareSource()` 先铺白底再画图，所以所有进入量化的像素 `alpha=255`；若将来支持透明背景，需要同步处理 `lut` 与透明色索引。
 7. **白条宽度按输出像素定义**：预览里乘了 `previewScale`，导出时不缩放。调整语义时两侧都要改。
+8. **Electron 外壳保持"无 Node 能力"**：`contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`，不加载 preload；页面只允许 `file:` 导航，外链交给 `shell.openExternal`。打包配置的 `files` 必须包含 `public/**`，否则安装后白屏。`electronDist` 指向 `node_modules/electron/dist`，用于跳过 GitHub 重复下载，因此打包前必须先 `npm install`。
 
 ## 改动检查清单
 
 - 动了 `quantizer.js` / `gif-encoder.js` / `comparer.js` → `npm test` 必须全绿；最好再用 Pillow 交叉验证：`python -c "from PIL import Image;im=Image.open('test/out/roundtrip.gif');print(im.n_frames, im.size, im.info.get('loop'))"`。
 - 动了 `comparer.js` 的合成/差分逻辑 → 除 `npm test` 外，跑 `npm run bench` 看体积是否异常膨胀（差分失效会立刻体现为几十倍体积）。
 - 动了前端脚本 → `node --check` 通过，并在 `public/index.html` 中确认引入顺序；新增文件记得加进该文件与 README 的目录表。
+- 动了 `electron/main.js` 或 `package.json` 的 `build` 配置 → `node --check electron/main.js`，并跑一次 `npm run electron:dir` 确认能产出 `dist/`。
 - 任何对外的行为/参数变化 → 同步更新 `README.md` 的参数表与本文档的说明。
 
 ## 代码风格
