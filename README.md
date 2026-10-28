@@ -47,6 +47,7 @@ HOST=0.0.0.0 npm start    # 允许局域网访问
 ```
 server.js                 零依赖静态服务入口（只有静态资源托管）
 package.json              npm start / test / bench
+SPEC.md                   从零复刻用的完整规格书（功能 / 界面 / 算法 / 验收）
 public/                   前端静态资源
   index.html
   css/style.css
